@@ -1,0 +1,32 @@
+Package: mibms
+Title: MIB-MS Kinome Analysis
+Version: 0.0.0.9000
+Authors@R: 
+    person("Christine", "Berryhill", , "causherm@iu.edu", role = c("aut", "cre"))
+Description: This package analyzes either DDA or DIA MIB-MS data. It cleans it up, extracts kinases, and generates heatmaps, PCA plot, and volcano plots for downstream interpretation.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3.9000
+Imports:
+	dplyr,
+	readxl,
+	fuzzyjoin,
+	stringr,
+	tibble,
+	arsenal,
+	tidyverse,
+	tidyr,
+	data.table,
+	sjmisc,
+	ggpubr,
+	ggsci,
+	ggplot2,
+	svglite,
+	rstatix,
+	pheatmap,
+	arrow
+Depends: 
+    R (>= 3.5)
+LazyData: true
