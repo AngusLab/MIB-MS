@@ -30,5 +30,6 @@ Imports:
 Depends: 
     R (>= 3.5)
 LazyData: true
-URL: https://github.com/caberryhill/mibms
-BugReports: https://github.com/caberryhill/mibms/issues
+URL: https://github.com/AngusLab/MIB-MS
+BugReports: https://github.com/AngusLab/MIB-MS/issues
+
