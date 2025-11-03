@@ -25,10 +25,10 @@ Imports:
 	ggplot2,
 	svglite,
 	rstatix,
-	pheatmap,
-	arrow
+	pheatmap
 Depends: 
-    R (>= 3.5)
+    R (>= 3.5),
+    arrow
 LazyData: true
 URL: https://github.com/AngusLab/MIB-MS
 BugReports: https://github.com/AngusLab/MIB-MS/issues

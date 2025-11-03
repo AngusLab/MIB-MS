@@ -4,18 +4,19 @@
 \alias{maxquant.cleanup}
 \title{This function cleans up and analyzes the DDA output from MaxQuant LFQ}
 \usage{
-maxquant.cleanup(df, kinases)
+maxquant.cleanup(df, kinases, metadata)
 }
 \arguments{
 \item{df}{proteinGroups.csv from MaxQuant}
 
 \item{kinases}{Either the human or mouse kinome spreadsheet}
+
+\item{metadata}{File with column titled "Sample.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate}
 }
 \description{
 This function cleans up and analyzes the DDA output from MaxQuant LFQ
 }
 \examples{
 maxquant.cleanup()
-
 }
-\keyword{DIANN}
+\keyword{DIANNE}
