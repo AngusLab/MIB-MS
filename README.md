@@ -1,4 +1,5 @@
 # MIB-MS
+
 MIB-MS kinome analysis package and protocols
 
 This package uses either MaxQuant LFQ or DIA-NN protein level data and filters for: 1) kinases (either human or mouse),2) proteins with >1 unique peptide, and 3) kinases quantified in all replicates of at least one sample.
@@ -25,3 +26,7 @@ peptide<- read_parquet("report.parquet")
 kinome.analysis<- diann.cleanup(df = df, sample = metadata, mouse.kinome)
 stats<- statistical.testing(DF = kinome.analysis)
 ```
+
+
+To install in R, please run: devtools::install_github("AngusLab/MIB-MS")
+
