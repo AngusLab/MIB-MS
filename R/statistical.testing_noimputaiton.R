@@ -10,6 +10,7 @@
 #' @export
 
 statistical.testing<-function(DF){
+
   ifelse(!dir.exists("DIA_analysis"), dir.create("DIA_analysis"), "DIA_analysis folder exists already")
   setwd("DIA_analysis")
   ifelse(!dir.exists("Volcano_plots"), dir.create("Volcano_plots"), "Volcano_plots folder exists already")

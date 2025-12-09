@@ -4,16 +4,16 @@
 \alias{diann.cleanup}
 \title{This function cleans up and analyzes the DIA output from DIANN, adding a pseudocount}
 \usage{
-diann.cleanup(df, fasta, peptides)
+diann.cleanup(df, kinases, metadata)
 }
 \arguments{
 \item{df}{Unique protein groups matrix from DIANN}
 
-\item{peptides}{report.parquet from DIANN}
-
 \item{kinases}{Either the human or mouse kinome spreadsheet}
 
-\item{metadata}{File with column titled "Sample.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate}
+\item{metadata}{File with column titled "metadata.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate}
+
+\item{peptides}{report.parquet from DIANN}
 }
 \description{
 This function cleans up and analyzes the DIA output from DIANN, adding a pseudocount

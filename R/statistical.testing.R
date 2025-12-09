@@ -69,7 +69,7 @@ statistical.testing.old<-function(DF){
   all_kinase$group2 <- sub("^Z.", "", all_kinase$group2)
 
 
-  write.csv(all_kinase,"T.test comparisons all kinases.csv")
+  write.csv(all_kinase,file=file.path("Results","T.test comparisons all kinases.csv"))
 
 
   all_kinase$ID<- paste0(all_kinase$group1, " v. ", all_kinase$group2)
@@ -97,8 +97,8 @@ statistical.testing.old<-function(DF){
       geom_vline(xintercept = -1, linetype=2) +
       grids(linetype="dashed")+border()
 
-    ggsave(p, file=paste0(A," vs ", B,".svg"),device = "svg", width=5, height=5)
-    ggsave(p, file=paste0(A," vs ", B,".pdf"), width=5, height=5)
+    ggsave(p, file=file.path("Volcano_plots",paste0(A," vs ", B,".svg")),device = "svg", width=5, height=5)
+    ggsave(p, file=file.path("Volcano_plots",paste0(A," vs ", B,".pdf")),device = "svg", width=5, height=5)
 
   }
 

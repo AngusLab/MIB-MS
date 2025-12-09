@@ -4,14 +4,14 @@
 #' @param df Unique protein groups matrix from DIANN
 #' @param kinases Either the human or mouse kinome spreadsheet
 #' @param peptides report.parquet from DIANN
-#' @param metadata File with column titled "Sample.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate
+#' @param metadata File with column titled "metadata.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate
 #' @keywords DIANN
 #' @examples
 #' diann.cleanup()
 #' @import dplyr fuzzyjoin stringr tibble arsenal tidyverse tidyr data.table sjmisc ggpubr ggsci ggplot2 svglite rstatix pheatmap arrow
 #' @export
 
-diann.cleanup<- function(df, fasta,peptides){
+diann.cleanup<- function(df, kinases, metadata){
 
   ifelse(!dir.exists("DIA_analysis"), dir.create("DIA_analysis"), "DIA_analysis folder exists already")
   setwd("DIA_analysis")
@@ -26,7 +26,7 @@ diann.cleanup<- function(df, fasta,peptides){
   }
 
   #Matching to either the human or mouse kinome
-  df.3<- fasta %>% inner_join(df, by=c("Gene"= "Genes"))
+  df.3<- kinases %>% inner_join(df, by=c("Gene"= "Genes"))
   df.3<- df.3[,-c(2)]
   log_message("Matched to kinome")
 
@@ -55,11 +55,11 @@ diann.cleanup<- function(df, fasta,peptides){
   colnames(df.3)[1]<- "Genes"
   log_message("Log transformed")
 
-  #Match Sample ID to treatment
+  #Match metadata ID to treatment
   df.4<-df.3 %>%
-    rename_with(~deframe(sample)[.x], .cols = sample$Sample.ID) %>%
-    dplyr::select(Genes, any_of(sample$Treatment))
-  log_message("Matched to sample ID")
+    rename_with(~deframe(metadata)[.x], .cols = metadata$Sample.ID) %>%
+    dplyr::select(Genes, any_of(metadata$Treatment))
+  log_message("Matched to metadata ID")
 
   df.4<- as.data.frame(t(df.4))
   colnames(df.4)<- df.4[1,]
@@ -121,14 +121,18 @@ diann.cleanup<- function(df, fasta,peptides){
     }}
 
 
-  log_message("Filtered for Kinases with enouch sample representation")
-  print("Filtered for Kinases with enouch sample representation")
+  log_message("Filtered for Kinases with enouch metadata representation")
+  print("Filtered for Kinases with enouch metadata representation")
 
   df.4<- df.4[colnames(df.4)%in% x]
   df.5<-data.frame(sapply(df.4, function(x) as.numeric(as.character(x))))
   log_message(paste0("The minimum value before adding pseudocount:", min(df.5, na.rm = T)))
   rownames(df.5)<- rownames(df.4)
-  df.5[is.na(df.5)]<-0; imputed_df.2<-df.5+0.1
+  #Adding a pseudocount of 1
+  min_value<- min(df.5, na.rm = T)-1
+  df.5[is.na(df.5)]<-min_value
+  log_message(paste0("The minimum value after adding pseudocount:", min(df.5, na.rm = T)))
+  imputed_df.2<- df.5
 
   imputed_df.2$Treatment<- rownames(imputed_df.2)
   imputed_df.2$Treatment<- sub("-.*", '', imputed_df.2$Treatment)
@@ -171,11 +175,11 @@ diann.cleanup<- function(df, fasta,peptides){
 
   bc.pca.var<- df_pca$sdev^2
   bc.pca.var<- round(bc.pca.var/sum(bc.pca.var)*100,1)
-  df.pca_data<- data.frame(sample= rownames(df_pca$x),
+  df.pca_data<- data.frame(metadata= rownames(df_pca$x),
                            x=df_pca$x[,1],
                            y = df_pca$x[,2])
 
-  df.pca_data$type<- sub("_.*", "", df.pca_data$sample)
+  df.pca_data$type<- sub("_.*", "", df.pca_data$metadata)
   df.pca_data$type<- sub("^ZZ.","", df.pca_data$type)
   df.pca_data$type<- sub("^Z.", "", df.pca_data$type)
   df.pca_data<-df.pca_data %>%
@@ -185,7 +189,7 @@ diann.cleanup<- function(df, fasta,peptides){
 
   df.pca_data$Rep<- as.character(as.numeric(df.pca_data$Rep))
 
-  a<-ggplot(data=df.pca_data,aes(label=sample,x=x,y=y, color = type, shape = Rep)) +
+  a<-ggplot(data=df.pca_data,aes(label=metadata,x=x,y=y, color = type, shape = Rep)) +
     ggtitle("Kinome PCA Plot") +
     geom_point(aes( size = 4)) +
     xlab(paste("PC1: ",bc.pca.var[1],"%",sep="")) +

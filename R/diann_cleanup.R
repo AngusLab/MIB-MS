@@ -12,11 +12,21 @@
 #' @export
 
 diann.cleanup.old<- function(df, kinases, metadata){
+  ifelse(!dir.exists("DIA_analysis"), dir.create("DIA_analysis"), "DIA_analysis folder exists already")
+  setwd("DIA_analysis")
+  ifelse(!dir.exists("Heatmaps"), dir.create("Heatmaps"), "Heatmaps folder exists already")
+  ifelse(!dir.exists("PCA"), dir.create("PCA"), "PCA folder exists already")
+  ifelse(!dir.exists("Results"), dir.create("Results"), "Results folder exists already")
 
+  log_message <- function(message, file = "Processing_log.txt") {
+    timestamp <- format(Sys.time(), "[%Y-%m-%d %H:%M:%S]")
+    cat(timestamp, message, "\n", file = file, append = TRUE)
+    print(message)
+  }
   #Matching to either the human or mouse kinome
   df.3<- kinases %>% inner_join(df, by=c("Gene"= "Genes"))
   df.3<- df.3[,-c(2)]
-  print(("Matched to kinome"))
+  log_message(("Matched to kinome"))
 
   #filtering out <2 Razor + unique peptides and rows where the gene name is blank
 
@@ -30,7 +40,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
   peptides.kinases.3<- as.data.frame(table(peptides.kinases.2$Genes))
   kinase.1.peptide<- peptides.kinases.3%>% filter(Freq==1)
   y<- as.character(length(unique(kinase.1.peptide$Var1)))
-  print(paste0("Number of kinases with only 1 peptide: ", y))
+  log_message(paste0("Number of kinases with only 1 peptide: ", y))
   df.3<- df.3[!df.3$Gene %in% kinase.1.peptide$Var1,]
   #Get rid of those kinases
 
@@ -41,12 +51,12 @@ diann.cleanup.old<- function(df, kinases, metadata){
   df.3<- df.3[,c(1)]
   df.3<- cbind(df.3, x)
   colnames(df.3)[1]<- "Genes"
-  print("Log transformed")
+  log_message("Log transformed")
   #Match Sample ID to treatment
   df.4<-df.3 %>%
     rename_with(~deframe(metadata)[.x], .cols = metadata$Sample.ID) %>%
     dplyr::select(Genes, any_of(metadata$Treatment))
-  print("Matched to sample ID")
+  log_message("Matched to sample ID")
 
   df.4<- as.data.frame(t(df.4))
   colnames(df.4)<- df.4[1,]
@@ -116,7 +126,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
     }}
 
 
-  print("Filtered for Kinases with enouch sample representation")
+  log_message("Filtered for Kinases with enouch sample representation")
 
   df.4<- df.4[colnames(df.4)%in% x]
   df.5<-data.frame(sapply(df.4, function(x) as.numeric(as.character(x))))
@@ -153,10 +163,9 @@ diann.cleanup.old<- function(df, kinases, metadata){
   imputed_df.2$Treatment<- sub("_.*", '', imputed_df.2$Treatment)
   imputed_df.2<- imputed_df.2[,c(ncol(imputed_df.2), 1:ncol(imputed_df.2)-1)]
 
-  print("Imputed")
+  log_message("Imputed")
 
-  write.table(imputed_df.2, "Relative Kinase Protein Abundance.txt")
-  write.csv(imputed_df.2, "Relative Kinase Protein Abundance.csv")
+  write.csv(imputed_df.2, file = file.path("Results","Relative Kinase Protein Abundance.csv"))
 
   DF<- imputed_df.2
   kinases<-colnames(DF)
@@ -176,9 +185,9 @@ diann.cleanup.old<- function(df, kinases, metadata){
                       digits.p=20,
                       data=DF), text=NULL)
   df<-as.data.frame(df)
-  write.csv(df, file="ANOVA.csv")
+  write.csv(df, file=file.path("Results","ANOVA.csv"))
 
-  print("Completed Summary statistics")
+  log_message("Completed Summary statistics")
   #PCA plots
 
   new_df<- imputed_df.2
@@ -216,10 +225,10 @@ diann.cleanup.old<- function(df, kinases, metadata){
            shape = guide_legend(override.aes = list(size=5)))
 
 
-  ggsave("PCA plot.svg", a, device= "svg", width = 10, height = 6)
-  ggsave("PCA plot.pdf", a, device= "pdf", width = 10, height = 6)
+  ggsave(filename = file.path("PCA","PCA plot.svg"), a, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("PCA","PCA plot.pdf"), a, device= "pdf", width = 10, height = 6)
 
-  print("Made PCA plot")
+  log_message("Made PCA plot")
   #Generating a heatmap and clustering using Euclidian distance
 
   new_df$type<- rownames(new_df)
@@ -248,7 +257,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
   df.matrix.z.score <- t(apply(df.matrix, 1, cal_z_score))
 
 
-  svg("Heatmap of the z-score of the Log2 LFQ kinome intensities by replicate.svg", width = 10, height = 10)
+  svg(filename = file.path("Heatmaps","Heatmap of the z-score of the Log2 LFQ kinome intensities by replicate.svg"), width = 10, height = 10)
 
   pheatmap(df.matrix.z.score,
            cluster_rows = T,
@@ -262,7 +271,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
            main="Z-score of the Log2 of the Kinase LFQ intensity (By Replicate)")
 
   dev.off()
-  print("Made heatmap of each replicate")
+  log_message("Made heatmap of each replicate")
   ## Z-score of the average
   new_df3<-new_df[,-ncol(new_df)]
   new_df3$type<- sub("-.*", "", new_df3$type)
@@ -275,7 +284,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
   df.matrix<- as.data.frame(t(new_df4))
   df.matrix.z.score2 <- t(apply(df.matrix, 1, cal_z_score))
 
-  svg("Heatmap of the z-score of the averaged Log2 LFQ kinome intensities.svg", width = 10, height = 10)
+  svg(filename = file.path("Heatmaps","Heatmap of the z-score of the averaged Log2 LFQ kinome intensities.svg"), width = 10, height = 10)
 
   pheatmap(df.matrix.z.score2,
            cluster_rows = T,
@@ -289,7 +298,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
            main="Z-score of the Log2 of the Averaged Kinase LFQ intensity")
 
   dev.off()
-  print("Made heatmap of averaged replicates")
+  log_message("Made heatmap of averaged replicates")
 
   # Heatmap of average of significant kinases
   colnames(df)[1]<- "Kinases"
@@ -301,7 +310,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
   df.matrix.z.score2<- df.matrix.z.score2[df.matrix.z.score2$Kinases %in% sig.output$Kinases,]
   df.matrix.z.score2<- df.matrix.z.score2[,-c(ncol(df.matrix.z.score2))]
 
-  svg("Heatmap of the z-score of the averaged Log2 LFQ significant kinases.svg", width = 10, height = 10)
+  svg(filename = file.path("Heatmaps","Heatmap of the z-score of the averaged Log2 LFQ significant kinases.svg"), width = 10, height = 10)
 
   pheatmap(df.matrix.z.score2,
            cluster_rows = T,
@@ -315,7 +324,7 @@ diann.cleanup.old<- function(df, kinases, metadata){
            main="Z-score of the Log2(Kinase LFQ intensity)")
 
   dev.off()
-  print("Made heatmap of averaged replicates - signficant")
+  log_message("Made heatmap of averaged replicates - signficant")
 
 
   return(imputed_df.2)
