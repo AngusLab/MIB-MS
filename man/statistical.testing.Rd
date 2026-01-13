@@ -4,10 +4,12 @@
 \alias{statistical.testing}
 \title{This function conducts t-tests across all parameters}
 \usage{
-statistical.testing(DF)
+statistical.testing(DF, directory)
 }
 \arguments{
 \item{DF}{output from either diann.cleanup or maxquant.cleanup}
+
+\item{directory}{Output directory}
 }
 \description{
 This function conducts t-tests across all parameters

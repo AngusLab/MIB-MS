@@ -4,7 +4,7 @@
 \alias{diann.cleanup.old}
 \title{This function cleans up and analyzes the DIA output from DIANN using imputation}
 \usage{
-diann.cleanup.old(df, kinases, metadata)
+diann.cleanup.old(df, kinases, metadata, directory, peptide)
 }
 \arguments{
 \item{df}{Unique protein groups matrix from DIANN}

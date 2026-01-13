@@ -4,7 +4,7 @@
 \alias{statistical.testing.old}
 \title{This function conducts t-tests across all parameters and corresponds to imputation}
 \usage{
-statistical.testing.old(DF)
+statistical.testing.old(DF, directory)
 }
 \arguments{
 \item{DF}{output from either diann.cleanup or maxquant.cleanup}

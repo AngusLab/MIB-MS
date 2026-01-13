@@ -11,12 +11,13 @@
 #' @import dplyr fuzzyjoin stringr tibble arsenal tidyverse tidyr data.table sjmisc ggpubr ggsci ggplot2 svglite rstatix pheatmap arrow
 #' @export
 
-diann.cleanup.old<- function(df, kinases, metadata){
-  ifelse(!dir.exists("DIA_analysis"), dir.create("DIA_analysis"), "DIA_analysis folder exists already")
-  setwd("DIA_analysis")
+diann.cleanup.old<- function(df, kinases, metadata, directory,peptide){
+  ifelse(!dir.exists(directory), dir.create(directory), "DIA_analysis folder exists already")
+  setwd(directory)
   ifelse(!dir.exists("Heatmaps"), dir.create("Heatmaps"), "Heatmaps folder exists already")
   ifelse(!dir.exists("PCA"), dir.create("PCA"), "PCA folder exists already")
   ifelse(!dir.exists("Results"), dir.create("Results"), "Results folder exists already")
+  ifelse(!dir.exists("QC"), dir.create("QC"), "QC folder exists already")
 
   log_message <- function(message, file = "Processing_log.txt") {
     timestamp <- format(Sys.time(), "[%Y-%m-%d %H:%M:%S]")
@@ -24,6 +25,15 @@ diann.cleanup.old<- function(df, kinases, metadata){
     print(message)
   }
   #Matching to either the human or mouse kinome
+
+  histo<- df%>%
+    pivot_longer(!Genes)%>%
+    mutate(value=log2(value))%>%
+    mutate(value= tidyr::replace_na(value, 0))%>%
+    mutate(type ="Pre-imputation")%>%
+    mutate(name=sub("Z.", "", name))%>%
+    mutate(name=sub("ZZ,","",name))
+
   df.3<- kinases %>% inner_join(df, by=c("Gene"= "Genes"))
   df.3<- df.3[,-c(2)]
   log_message(("Matched to kinome"))
@@ -131,7 +141,16 @@ diann.cleanup.old<- function(df, kinases, metadata){
   df.4<- df.4[colnames(df.4)%in% x]
   df.5<-data.frame(sapply(df.4, function(x) as.numeric(as.character(x))))
   rownames(df.5)<- rownames(df.4)
+  #Heatmap of missing values
+  missing_mat <- is.na(df.5) * 1
+  svg(filename = file.path("QC","Heatmap of missing values.svg"), width = 10, height = 10)
+  pheatmap(missing_mat,
+           cluster_rows=TRUE,
+           cluster_cols=TRUE,
+           border_color = "black",
+           show_colnames = FALSE,)
 
+  dev.off()
   #Impute
   impute_normal <- function(object, width=0.3, downshift=1.8, seed=100) {
 
@@ -157,6 +176,60 @@ diann.cleanup.old<- function(df, kinases, metadata){
 
   imputed_df<- impute_normal(df.5)
   imputed_df.2<- as.data.frame(imputed_df)
+  histo2<- as.data.frame(t(imputed_df.2))
+  histo2$Genes<- colnames(imputed_df.2)
+
+  histo2<- histo2%>%
+    pivot_longer(!Genes)%>%
+    mutate(value= tidyr::replace_na(value, 0))%>%
+    mutate(type ="Post-median")%>%
+    mutate(name=sub("Z.", "", name))%>%
+    mutate(name=sub("ZZ,","",name))
+
+
+
+  histogram<- rbind(histo, histo2)
+
+  b<- ggplot(histogram, aes(x=(value),fill = type))+
+    geom_histogram(color="#e9ecef", alpha=0.6, position = "identity")+
+    scale_fill_manual(values=c("#69b3a2", "#404080")) +
+    ggtitle("Log2(Relative Protein Abundances Post Imputation)")+
+    xlab("log2(Protein Abundances)")+
+    theme_bw()+
+    facet_wrap(~name, ncol = 3)
+
+  b
+
+  ggsave(filename = file.path("QC","Global abundances histogram.svg"), b, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("QC","Global abundances histogram.pdf"), b, device= "pdf", width = 10, height = 6)
+
+  c<- ggplot(histogram%>%filter(type=="Pre-imputation")%>%filter(value!=0), aes(x=(value),y = name))+
+    geom_jitter(color="#6287AF", alpha=0.9)+
+    ggtitle("Log2(Relative Protein Abundances Pre-imputation Normalization)")+
+    xlab("log2(Protein Abundances)")+
+    theme_bw()+
+    stat_summary(fun.x = median, fun.xmin = median, fun.xmax = median,
+                 geom = "crossbar", width = 0.5)
+
+  c
+
+  ggsave(filename = file.path("QC","Global abundances pre imputation.svg"), c, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("QC","Global abundances pre imputation.pdf"),c, device= "pdf", width = 10, height = 6)
+
+  d<- ggplot(histogram%>%filter(type=="Post-imputation")%>%filter(value!=0), aes(x=(value),y = name))+
+    geom_jitter(color="#6287AF", alpha=0.9)+
+    ggtitle("Log2(Relative Protein Abundances Post-imputation Normalization)")+
+    xlab("log2(Protein Abundances)")+
+    theme_bw()+
+    stat_summary(fun.x = median, fun.xmin = median, fun.xmax = median,
+                 geom = "crossbar", width = 0.5)
+
+
+  d
+  ggsave(filename = file.path("QC","Global abundances post imputation normalization.svg"), d, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("QC","Global abundances post imputation normalization.pdf"),d, device= "pdf", width = 10, height = 6)
+
+
 
   imputed_df.2$Treatment<- rownames(imputed_df.2)
   imputed_df.2$Treatment<- sub("-.*", '', imputed_df.2$Treatment)

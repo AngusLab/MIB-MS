@@ -8,7 +8,7 @@ Users must also create a metadata file to match the protein column names with th
 
 To force the correct comparison, users may put "Z." in front of the control sample treatment name, thus creating the Treatment vs. Control comparison.
 
-For DIA-NN, the report.parquet file is also required.
+For DIA-NN, the pr matrix file is also required.
 
 Below is how to set up the env and run the script:
 
@@ -22,7 +22,7 @@ data("mouse.kinome") #Load pre-installed kinome data
 
 df<-read.csv("proteinGroups.csv", check.names = F)
 metadata<-read.csv("Sample.csv")
-peptide<- read_parquet("report.parquet")
+peptide<- read_parquet("peptides.csv")
 kinome.analysis<- diann.cleanup(df = df, sample = metadata, mouse.kinome)
 stats<- statistical.testing(DF = kinome.analysis)
 ```
