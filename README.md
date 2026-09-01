@@ -15,16 +15,21 @@ Below is how to set up the env and run the script:
 
 ```r
 library(mibms)
-library(arrow)
 
-data("mouse.kinome") #Load pre-installed kinome data
-
+data("human.kinome") #Load pre-installed kinome data
 
 df<-read.csv("proteinGroups.csv", check.names = F)
 metadata<-read.csv("Sample.csv")
-peptide<- read_parquet("peptides.csv")
-kinome.analysis<- diann.cleanup(df = df, sample = metadata, mouse.kinome)
-stats<- statistical.testing(DF = kinome.analysis)
+peptide<- read.table("report.pr_matrix.tsv", header = T, sep="\t")
+
+kinome.analysis<- diann.cleanup(df = df, 
+                                human.kinome, 
+                                metadata = metatdata,
+                                directory="DIA_kinome",
+                                unique_df = "protein",
+                                peptide=peptide)
+
+stats<- statistical.testing.test(DF = kinome.analysis, directory = "Stats")
 ```
 
 

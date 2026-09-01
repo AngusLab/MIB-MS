@@ -1,9 +1,9 @@
-#' This function cleans up and analyzes the DIA output from DIANN, adding a pseudocount
+#' This function cleans up and analyzes the DIA output from DIANN, adding a pseudocount and imputing
 #'
 #'
 #' @param df Unique protein groups matrix from DIANN
 #' @param kinases Either the human or mouse kinome spreadsheet
-#' @param peptides report.parquet from DIANN
+#' @param peptides report.pr.matrix from DIANN
 #' @param metadata File with column titled "Sample.ID" with the column names of the abundance values in the protein groups file, and a column titled "Treatment" with the corresponding treatment replicate
 #' @param directory Output folder
 #' @param unique_df Either "protein" for pg.matrix or "gene" for unique_gene.matrix
@@ -87,7 +87,7 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   x<- as.character(length(unique(protein$Genes)))
   log_message(paste0("Number of proteins kept: ", x, "/",y))
 
-  kinase.peptides1<- df[df$Genes%in% human.kinome$Gene,]
+  kinase.peptides1<- df[df$Genes%in% kinases$Gene,]
   kinase.peptides<- protein[protein$Genes%in% human.kinome$Gene,]
   y<- as.character(length(unique(kinase.peptides1$Genes)))
   x<- as.character(length(unique(kinase.peptides$Genes)))
@@ -97,6 +97,10 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   protein<-protein %>%
     rename_with(~deframe(metadata)[.x], .cols = metadata$Sample.ID) %>%
     dplyr::select(Genes, any_of(metadata$Treatment))
+
+  #starting stats file
+  stats<-as.data.frame()
+  stats<-protein%>%
 
   log_message("Matched to sample ID")
 
@@ -130,7 +134,7 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
 
   for(i in 2:ncol(df.3)){
     x<- median(df.3[,i], na.rm = T)
-    u<- ((df.3[,i]/x)*max.med)
+    u<- ((df.3[,i]-x)+max.med)
     med.norm[[i-1]]<- flatten(as.data.frame(u))
   }
 
@@ -236,7 +240,7 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   ggsave(filename = file.path("QC","PCA plot pre filter and imputation.svg"), a, device= "svg", width = 10, height = 6)
   ggsave(filename = file.path("QC","PCA plot pre filter and imputation.pdf"), a, device= "pdf", width = 10, height = 6)
 
-  #Filter for columns where at least one group has 3 values
+  #Filter for columns where at least one group n-1 observed
   rownames(df.4)<- df.4[,1]
   df.4<- as.data.frame(t(df.4))
   df.4<- df.4[-c(1),]
@@ -305,6 +309,7 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   df.5<-data.frame(sapply(df.4, function(x) as.numeric(as.character(x))))
   rownames(df.5)<- rownames(df.4)
   print(paste0("The minimum value before adding pseudocount:", min(df.5, na.rm = T)))
+  log_message(paste0("The minimum value before adding pseudocount:", min(df.5, na.rm = T)))
 
 
   hybrid_impute <- function(data,
@@ -389,8 +394,6 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   df_imputed <- as.data.frame(res$imputed)
   df_method  <- as.data.frame(res$method)
 
-  print(paste0("The minimum value after adding pseudocount:", min(df_imputed, na.rm = T)))
-
   # imputation checks
   #Looking at number of missing values
   missing_mat <- is.na(df.5) * 1
@@ -458,7 +461,19 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   imputed_df.2$Treatment<- sub("_.*", '', imputed_df.2$Treatment)
   imputed_df.2<- imputed_df.2[,c(ncol(imputed_df.2), 1:ncol(imputed_df.2)-1)]
 
+
+
   log_message("Imputed")
+
+  density<- imputed_df.3%>%
+    tidyverse::rownames_to_columns("Treatment")%>%pivot_longer(cols = !Treatment)
+  p2 <- ggplot(density, aes(x=value, group=Treatment, fill=Treatment)) +
+    geom_density(adjust=1.5, alpha=.2) +
+    theme_bw()
+  ggsave(filename = file.path("QC","Final Global abundances density.svg"), p2, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("QC","Final Global abundances density.pdf"),p2, device= "pdf", width = 10, height = 6)
+
+
 
   new_df<- imputed_df.2
   new_df<- new_df[,c(-1)]
@@ -504,6 +519,9 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
 
   write.csv(cleaned_up_global, file = file.path("Results","Relative Global Protein Abundance.csv"))
 
+  #QC stats
+
+
 
   #Matching to either the human or mouse kinome
   imputed_df.2<- as.data.frame(t(imputed_df.2))
@@ -518,6 +536,15 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   imputed_df.3$Treatment<- sub("-.*", '', imputed_df.3$Treatment)
   imputed_df.3$Treatment<- sub("_.*", '', imputed_df.3$Treatment)
   imputed_df.3<- imputed_df.3[,c(ncol(imputed_df.3), 1:ncol(imputed_df.3)-1)]
+
+  density<- imputed_df.3%>%pivot_longer(cols = !Treatment)
+  p2 <- ggplot(density, aes(x=value, group=Treatment, fill=Treatment)) +
+    geom_density(adjust=1.5, alpha=.2) +
+    theme_bw()
+  ggsave(filename = file.path("QC","Final Kinase abundances density.svg"), p2, device= "svg", width = 10, height = 6)
+  ggsave(filename = file.path("QC","Final Kinase abundances density.pdf"),p2, device= "pdf", width = 10, height = 6)
+
+
 
   cleaned_up_kinases<- imputed_df.3
   cleaned_up_kinases$Treatment<- sub("Z.","",rownames(cleaned_up_kinases))
@@ -615,15 +642,62 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   df.matrix.z.score <- t(apply(df.matrix, 1, cal_z_score))
 
 
-  svg(filename = file.path("Heatmaps","Z-score of the Log2 LFQ kinome intensities by replicate.svg"), width = 10, height = 10)
+  heatmap_variables<-function(mat){
+    n_rows <- nrow(mat)
+    n_cols <- ncol(mat)
+    if (n_rows <= 100) {
+      cell_h <- 12
+      font_r <- 10
+    } else if (n_rows <= 250) {
+      cell_h <- 8
+      font_r <- 7
+    } else if (n_rows <= 450) {   # covers your max
+      cell_h <- 5
+      font_r <- 4
+    } else {
+      cell_h <- 3
+      font_r <- 2
+    }
+    if (n_cols <= 8) {
+      cell_w <- 25
+    } else if (n_cols <= 20) {
+      cell_w <- 20
+    } else if (n_cols <= 40) {
+      cell_w <- 15
+    } else {
+      cell_w <- 10
+    }
+
+    show_rows <- n_rows <= 450
+    svg_height_in <- max(6, (n_rows * cell_h) / 72 + 2)
+    svg_width_in <- max(8, min(40, (n_cols * cell_w) / 72 + 2))
+
+    list(
+      n_rows = n_rows,
+      n_cols = n_cols,
+      cell_h = cell_h,
+      font_r = font_r,
+      cell_w = cell_w,
+      show_rows = show_rows,
+      svg_height_in = svg_height_in,
+      svg_width_in = svg_width_in
+    )
+  }
+  vars<- heatmap_variables(df.matrix.z.score)
+
+
+  svg(filename = file.path("Heatmaps","Z-score of the Log2 LFQ kinome intensities by replicate.svg"),
+      width =vars$svg_width_in, height = vars$svg_height_in)
 
   pheatmap(df.matrix.z.score,
            cluster_rows = T,
            cluster_cols = T,
            clustering_distance_rows = 'euclidean',
            clustering_distance_cols = "euclidean",
-           fontsize_row = 3,
-           cellwidth = 20,
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
            colorRampPalette(c("#000080", "white", "#DC143C"))(100),
            angle_col = 45,
            main="Z-score of the Log2 of the Kinase LFQ intensity (By Replicate)")
@@ -642,15 +716,20 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   df.matrix<- as.data.frame(t(new_df4))
   df.matrix.z.score2 <- t(apply(df.matrix, 1, cal_z_score))
 
-  svg(filename = file.path("Heatmaps","Z-score of the averaged Log2 LFQ kinome intensities.svg"), width = 10, height = 10)
+  vars<- heatmap_variables(df.matrix.z.score2)
+
+  svg(filename = file.path("Heatmaps","Z-score of the averaged Log2 LFQ kinome intensities.svg"),
+      width = vars$svg_width_in, height = vars$svg_height_in)
 
   pheatmap(df.matrix.z.score2,
            cluster_rows = T,
            cluster_cols = T,
            clustering_distance_rows = 'euclidean',
            clustering_distance_cols = "euclidean",
-           fontsize_row = 3,
-           cellwidth = 20,
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
            colorRampPalette(c("#000080", "white", "#DC143C"))(100),
            angle_col = 45,
            main="Z-score of the Log2 of the Averaged Kinase LFQ intensity")
@@ -663,26 +742,113 @@ diann.cleanup<- function(df, kinases, metadata, directory, unique_df, peptide ){
   sig.output<- df %>% filter(`p value` <= 0.05)
   y<- as.character(length(unique(sig.output$Kinases)))
   print(paste0("Number of significant kinases: ", y))
+
+  ##Heatmap of each replicate
+  df.matrix.z.score3<- as.data.frame(df.matrix.z.score)
+  df.matrix.z.score3$Kinases<- rownames(df.matrix.z.score3)
+  df.matrix.z.score3<- df.matrix.z.score3[df.matrix.z.score3$Kinases %in% sig.output$Kinases,]
+  df.matrix.z.score3<- df.matrix.z.score3[,-c(ncol(df.matrix.z.score3))]
+
+  vars<- heatmap_variables(df.matrix.z.score3)
+  svg(filename = file.path("Heatmaps","Z-score of the Log2 LFQ significant kinases reps.svg"),
+      width = vars$svg_width_in, height = vars$svg_height_in)
+  pheatmap(df.matrix.z.score3,
+           cluster_rows = T,
+           cluster_cols = T,
+           clustering_distance_rows = 'euclidean',
+           clustering_distance_cols = "euclidean",
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
+           colorRampPalette(c("#000080", "white", "#DC143C"))(100),
+           angle_col = 45,
+           main="Z-score of the Significant Log2(Kinase LFQ intensity)- By Rep")
+
+  dev.off()
+  log_message("Made heatmap of replicates - signficant")
+  #Heatmap of average
   df.matrix.z.score2<- as.data.frame(df.matrix.z.score2)
   df.matrix.z.score2$Kinases<- rownames(df.matrix.z.score2)
   df.matrix.z.score2<- df.matrix.z.score2[df.matrix.z.score2$Kinases %in% sig.output$Kinases,]
   df.matrix.z.score2<- df.matrix.z.score2[,-c(ncol(df.matrix.z.score2))]
 
-  svg(filename = file.path("Heatmaps","Z-score of the averaged Log2 LFQ significant kinases.svg"), width = 10, height = 10)
+  vars<- heatmap_variables(df.matrix.z.score2)
+
+  svg(filename = file.path("Heatmaps","Z-score of the averaged Log2 LFQ significant kinases.svg"),
+      width = vars$svg_width_in, height = vars$svg_height_in)
   pheatmap(df.matrix.z.score2,
            cluster_rows = T,
            cluster_cols = T,
            clustering_distance_rows = 'euclidean',
            clustering_distance_cols = "euclidean",
-           fontsize_row = 3.5,
-           cellwidth = 20,
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
            colorRampPalette(c("#000080", "white", "#DC143C"))(100),
            angle_col = 45,
-           main="Z-score of the Log2(Kinase LFQ intensity)")
+           main="Z-score of the ANOVA Significant \nLog2(Kinase LFQ intensity)")
 
   dev.off()
   log_message("Made heatmap of averaged replicates - signficant")
   log_message("Finished script")
+
+
+  sig.output<- df %>% filter(`p value` <= 0.05)%>% arrange(`p value`) %>% head(100)
+  ##Heatmap of each replicate top 100
+  df.matrix.z.score4<- df.matrix.z.score3[rownames(df.matrix.z.score3) %in% sig.output$Kinases,]
+  #df.matrix.z.score4<- df.matrix.z.score4[,-c(ncol(df.matrix.z.score4))]
+
+  ##Heatmap of each replicate
+
+  print(head(df.matrix.z.score4))
+
+  vars<- heatmap_variables(df.matrix.z.score4)
+  svg(filename = file.path("Heatmaps","Top 100 significant proteins-rep.svg"),
+      width = vars$svg_width_in, height = vars$svg_height_in)
+  pheatmap(df.matrix.z.score4,
+           cluster_rows = T,
+           cluster_cols = T,
+           clustering_distance_rows = 'euclidean',
+           clustering_distance_cols = "euclidean",
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
+           colorRampPalette(c("#000080", "white", "#DC143C"))(100),
+           angle_col = 45,
+           main="Z-score of top 100 Significant \nLog2(Kinase LFQ intensity)- By Rep")
+
+  dev.off()
+  log_message("Made heatmap of replicates - signficant")
+
+  ##Heatmap of each average top 100
+  df.matrix.z.score5<- df.matrix.z.score2[rownames(df.matrix.z.score2) %in% sig.output$Kinases,]
+  #df.matrix.z.score5<- df.matrix.z.score5[,-c(ncol(df.matrix.z.score5))]
+
+  ##Heatmap of each replicate
+
+  print(head(df.matrix.z.score5))
+
+  vars<- heatmap_variables(df.matrix.z.score5)
+  svg(filename = file.path("Heatmaps","Top 100 significant proteins-average.svg"),
+      width = vars$svg_width_in, height = vars$svg_height_in)
+  pheatmap(df.matrix.z.score5,
+           cluster_rows = T,
+           cluster_cols = T,
+           clustering_distance_rows = 'euclidean',
+           clustering_distance_cols = "euclidean",
+           fontsize_row = vars$font_r,
+           cellheight = vars$cell_h,
+           cellwidth = vars$cell_w,
+           show_rownames = vars$show_rows,
+           colorRampPalette(c("#000080", "white", "#DC143C"))(100),
+           angle_col = 45,
+           main="Z-score of top 100 Significant \nLog2(Kinase LFQ intensity)")
+
+  dev.off()
+  log_message("Made heatmap of average - signficant")
 
   return(imputed_df.3)
 
