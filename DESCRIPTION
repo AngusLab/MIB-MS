@@ -1,9 +1,9 @@
 Package: mibms
 Title: MIB-MS Kinome Analysis
-Version: 0.0.1.0000
+Version: 0.0.2.0000
 Authors@R: 
     person("Christine", "Berryhill", , "causherm@iu.edu", role = c("aut", "cre"))
-Description: This package analyzes either DDA or DIA MIB-MS data. It cleans it up, extracts kinases, and generates heatmaps, PCA plot, and volcano plots for downstream interpretation.
+Description: This package analyzes either DDA or DIA MIB-MS data. It cleans it up, extracts kinases, and generates heatmaps, PCA plot, and volcano plots for downstream interpretation. Also now has bioinformatic functions
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8
@@ -25,7 +25,18 @@ Imports:
 	ggplot2,
 	svglite,
 	rstatix,
-	pheatmap
+	pheatmap,
+	clusterProfiler,
+	igraph,
+	org.Hs.eg.db,
+	ReactomePA,
+	enrichplot,
+	GOSemSim,
+	ggraph,
+	STRINGdb,
+	pathview,
+	DOSE,
+	scales
 Depends: 
     R (>= 3.5),
     arrow
