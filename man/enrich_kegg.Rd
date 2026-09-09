@@ -6,7 +6,7 @@
 \usage{
 enrich_kegg(
   df,
-  universe = universe,
+  universe,
   gene_col = "Protein",
   lfc_col = "logFC",
   type = paste0(unique(df$Contrast), "-all-up")

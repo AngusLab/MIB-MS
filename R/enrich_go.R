@@ -24,7 +24,7 @@ enrich_go<-function(df,universe,gene_col="Protein",lfc_col="logFC" ,
   dir_name <- paste0("EnrichGO_",go_type,"_" ,type)
   dir.create(file.path(dir_name), showWarnings = FALSE)
   setwd(file.path(dir_name))
-  message("Running Enrich GO for: ", type,": ",go_type, " | ", getwd())
+  cat("Running Enrich GO for: ", type,": ",go_type, " | ", getwd(),".\n")
 
 
   genes<-mapIds(org.Hs.eg.db, df[[gene_col]], "ENTREZID", "SYMBOL")
@@ -50,10 +50,12 @@ enrich_go<-function(df,universe,gene_col="Protein",lfc_col="logFC" ,
                               readable = TRUE)
 
   if (is.null(go_terms_results) || nrow(go_terms_results@result) == 0) {
-    message("No GO results for: ", type," ",go_type ," — skipping.")
+    cat("No GO results for: ", type," ",go_type ,". No data for you: BOOM.TOASTED..\n")
     return()
   }
-
+  cat("Finished running Enrich GO for: ", type, "\n")
+  # Simplify GO terms using clusterprofiler - removes redundat GO terms
+  go_terms_results <- clusterProfiler::simplify(go_terms_results, cutoff = 0.5, by = "p.adjust", select_fun = min)
   up_go_term_df<- as.data.frame(go_terms_results@result)
   boring_terms <- c("kinase activity", "phosphorylation",
                     "protein phosphorylation", "ATP binding",
@@ -62,11 +64,10 @@ enrich_go<-function(df,universe,gene_col="Protein",lfc_col="logFC" ,
     filter(!grepl(paste(boring_terms, collapse = "|"),
                   Description, ignore.case = TRUE))%>%
     filter(Count>=min_count)
-
   go_terms_results@result<-up_go_term_df
 
   if (nrow(up_go_term_df) == 0) {
-    message(paste("No enrichgo results found for:", type, "Skipping visualization."))
+    cat(paste("No enrichgo results found for:", type, "Skipping visualization.\n"))
     return()
   }
   b<-dotplot(go_terms_results, showCategory = 15,
@@ -90,21 +91,21 @@ enrich_go<-function(df,universe,gene_col="Protein",lfc_col="logFC" ,
   ggsave(paste0(type," EnrichGO results.png"), b, device = "png",
          height = plot_height, width=plot_width, dpi=300)
   write.csv(up_go_term_df, paste0(type, "-",go_type ,"GO Terms.csv"))
+  cat("Finished Making Enrich GO plot for: ", type,go_type, "\n")
 
 
-  # Simplify GO terms using clusterprofiler - removes redundat GO terms
-  ego2 <- clusterProfiler::simplify(go_terms_results,
-                                    cutoff = 0.5, by = "p.adjust", select_fun = min)
+  if(nrow(go_terms_results@result)>1){
+  ego3<-make_cnet_plot(go_terms_results,go_type=go_type, type=type,bio_type="GO")
+  cat("Finished network analysis GO analysis for: ", type,"|",go_type, "\n")
 
+  string_analysis(go_terms_results,go_type=go_type,type=type)
+  cat("Finished STRING network analysis GO analysis for: ", type,"|",go_type, "\n")
+  }else{
+    cat("Only", nrow(go_terms_results@result), "simplified GO term for:",
+        type, "|", go_type, "; skipping network analysis.\n")
+  }
 
-  ego3<-make_cnet_plot(ego2,go_type=go_type, type=type,bio_type="GO")
-
-  string_analysis(ego3,go_type=go_type,type=type)
-
-  print(paste0("Done with enrichGO for: ", type," | ", go_type))
-
-  return(ego3)
-
+  cat("Finished Enrich GO analysis for: ", type,"|",go_type, ".\n")
 
 
 }

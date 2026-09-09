@@ -29,6 +29,7 @@ make_cnet_plot<-function(bio_result,go_type="BP", type="helper",bio_type="GO"){
   p_cnet
   ggsave(paste0(go_type,"_","Cnetplot_of_",type,".png"), p_cnet, width = 8, height = 6, dpi = 300)
   ggsave(paste0(go_type,"_","Cnetplot_of_",type,".svg"), p_cnet, width = 8, height = 6, device = "svg")
+  cat("Made cnetplot for: ", type,", ",bio_type, ".\n")
 
   # term-term similarity network - takes simiplified GO terms and calculates similarity
   ## Makes plots showing how much they're connected
@@ -41,8 +42,8 @@ make_cnet_plot<-function(bio_result,go_type="BP", type="helper",bio_type="GO"){
   }
 
   if (nrow(ego2@result) < 2) {
-    message("Too few terms for emapplot. Skipping.")
-  } else {
+    cat("Too few terms for emmapplot and all the other plots. Skipping. Big Sad.")
+  } else {tryCatch({
     #Emap- essentially clusters of the common terms
     p_emap <- emapplot(ego2, showCategory = 10, layout = "kk") +
       theme_void()+
@@ -58,9 +59,11 @@ make_cnet_plot<-function(bio_result,go_type="BP", type="helper",bio_type="GO"){
     ggsave(paste0(go_type, "_", type, "_emapplot.svg"), p_emap, device = "svg",
            width = 10, height = 8, dpi = 300)
     #Tree plot with key words at the end.
+    nterms<-nrow(ego2@result)
+    ncolors <- min(5, nterms)
     p_tree <- treeplot(ego2, showCategory = 30,
-                       group_color=ggsci::pal_jco("default")(10),
-                       cluster.params = list(n = 5,label_words_n = 2,label_format = 25)) +
+                       group_color=ggsci::pal_jco("default")(ncolors),
+                       cluster.params = list(n =ncolors,label_words_n = 2,label_format = 25)) +
       scale_color_gradient(low  = "red2",
                            high = "navy",
                            name = "p.adjust",
@@ -75,6 +78,7 @@ make_cnet_plot<-function(bio_result,go_type="BP", type="helper",bio_type="GO"){
            width = 14, height = 8, dpi = 300)
     ggsave(paste0(go_type, "_", type, "_treeplot.svg"), p_tree, device = "svg",
            width = 14, height = 8, dpi = 300)
+    cat("Made emapplot and treeplot for: ", type,", ",bio_type, ".\n")
 
     #Simplified dotplot
     b<-dotplot(ego2, showCategory = 10,
@@ -98,6 +102,11 @@ make_cnet_plot<-function(bio_result,go_type="BP", type="helper",bio_type="GO"){
 
     ggsave(paste0(type," Simplified",go_type, "results.png"), b,
            device = "png", height = plot_height, width = plot_width)
+    cat("Made simplified dotplot for: ", type,", ",bio_type, ".\n")
+
+  },error=function(e){
+    cat("Emapplots failed for some unknown reason. Big Sad:",type,"-",go_type,":",e$message,".\n")
+  })
 
   }
 
@@ -119,9 +128,10 @@ string_analysis<-function(simplifed_term,go_type="BP", type="helper"){
   ppi$from_symbol<- id_map$gene[match(ppi$from, id_map$STRING_id)]
   ppi$to_symbol <- id_map$gene[match(ppi$to, id_map$STRING_id)]
   ppi2 <- ppi[!is.na(ppi$from_symbol) & !is.na(ppi$to_symbol), ]
+  cat("Mapped PPIs for: ", type, ".\n")
 
   if(nrow(ppi2)<2){
-    message("Too few mapped PPIs")
+    cat("Too few mapped PPIs")
     return()
   }
 
@@ -144,6 +154,7 @@ string_analysis<-function(simplifed_term,go_type="BP", type="helper"){
          a, width = 10, height = 8, dpi = 300)
   ggsave(paste0(go_type,"_",type,"_basic String plot.svg"),
          a, width = 10, height = 8, device="svg")
+  cat("Made basic string plot for: ", type, ".\n")
 
   # Gene -> GO term mapping
   gene2term <- stack(setNames(strsplit(simplifed_term@result$geneID, "/"),simplifed_term@result$Description))
@@ -202,6 +213,7 @@ string_analysis<-function(simplifed_term,go_type="BP", type="helper"){
 
   ggsave(paste0(go_type,"_",type,"_String plot with complexes.svg"), b_string,
          width = 10, height = 8, device="svg")
+  cat("Made colored by complex string plot for: ", type, ".\n")
 
   # Cluster modules
   set.seed(123)
@@ -221,8 +233,9 @@ string_analysis<-function(simplifed_term,go_type="BP", type="helper"){
           plot.background = element_rect(fill = "white", colour = "white"))+
     ggtitle(paste0(go_type," ",gsub("_"," ",type)," proteins with leiden clustering"))
 
-  ggsave(paste0(go_type,"_",type,"_String plot with leiden clustered modules.png"),c)
-  ggsave(paste0(go_type,"_",type,"_String plot with leiden clustered modules.svg"),c, device = "svg")
+  ggsave(paste0(go_type,"_",type,"_leiden clustered modules.png"),c)
+  ggsave(paste0(go_type,"_",type,"_leiden clustered modules.svg"),c, device = "svg")
+  cat("Made leiden clustered string plot for: ", type, ".\n")
 
 }
 

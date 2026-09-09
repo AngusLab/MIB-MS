@@ -36,7 +36,8 @@ Imports:
 	STRINGdb,
 	pathview,
 	DOSE,
-	scales
+	scales,
+	AnnotationDbi
 Depends: 
     R (>= 3.5),
     arrow

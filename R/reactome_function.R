@@ -26,7 +26,7 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
   dir_name <- paste0("Reactome_", type)
   dir.create(file.path(dir_name), showWarnings = FALSE)
   setwd(file.path(dir_name))
-  message("Running Reactome for: ", type, " | ", getwd())
+  cat("Running Reactome for: ", type, " | ", getwd(),".\n")
 
   #Maping Gene symbol back to EntrezID
   genes<-mapIds(org.Hs.eg.db, df[[gene_col]], "ENTREZID", "SYMBOL")
@@ -52,7 +52,7 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
   de <- names(gene_list)
 
   if (length(de) == 0) {
-    message("No genes to test for: ", type, " — skipping.")
+    cat("No genes to test for: ", type, " — skipping.\n")
     return()
   }
 
@@ -65,28 +65,31 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
 
 
   if (is.null(x) || nrow(x@result) == 0) {
-    message("No Reactome results for: ", type, " — skipping.")
+    cat("No Reactome results for: ", type, " . No data for you: BOOM.TOASTED.\n")
     return()
   }
 
   react <- as.data.frame(x@result)
 
-  react_simplified  <- tryCatch({
-    x_sim<-pairwise_termsim(x, method = "JC")
-    sim<-x_sim@termsim
-    d<-as.dist(1-sim)
-    hc<-hclust(d)
-    cluster<-cutree(hc,h=0.5)# JC >= 0.5 means distance <= 0.5
-    react_simplifed<-x_sim@result%>%mutate(cluster=cluster[match(Description,names(cluster))])%>%
-      group_by(cluster)%>%
-      slice_min(p.adjust,n=1,with_ties = F)%>%
-      ungroup()
-
-  },error = function(e) {
-    message("pairwise_termsim failed for ", type, ": ", e$message)
-    return(NULL)
+  if (nrow(react) >= 2) {
+    react_simplified <- tryCatch({
+      x_sim <- pairwise_termsim(x, method = "JC")
+      sim <- x_sim@termsim
+      d <- as.dist(1 - sim)
+      hc <- hclust(d)
+      cluster <- cutree(hc, h = 0.5)
+      x_sim@result %>%
+        mutate(cluster = cluster[match(Description, names(cluster))]) %>%
+        arrange(cluster, p.adjust)
+    }, error = function(e) {
+      cat("pairwise_termsim failed for ", type, ": ", e$message, "\n")
+      react %>% mutate(cluster = NA)
+    })
+  } else {
+    cat("Only", nrow(react), " Reactome terms for:", type, "; skipping similarity clustering.\n")
+    react_simplified <- react
   }
-  )
+  cat("Ran Reactome and conducted Jaccard similarity: ", type, ".\n")
 
   react_filtered <- react_simplified  %>% filter(p.adjust <= padj_fallback, Count >= min_count) %>%
     arrange(p.adjust) %>%
@@ -100,7 +103,7 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
 
 
   if (nrow(react_filtered) == 0) {
-    message("No Reactome results after filtering for: ", type, " — skipping.")
+    cat("No Reactome results after filtering for: ", type, " — skipping.\n")
     return()
   }
 
@@ -130,17 +133,27 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
   ggsave(paste0(type, "_Reactome_dotplot.png"), react_dot,
          device = "png", width = plot_width, height = plot_height)
 
-
+  cat("Made dotplot for: ", type, ".\n")
   keep_ids <- react_filtered$ID
-  x_filtered <- x[x$ID %in% keep_ids, asis = TRUE]
+  x_filtered <- x
+  x_filtered@result<-x@result[x@result$ID %in% keep_ids,]
   x_filtered@pvalueCutoff <- 0.2
 
-  ego3<-make_cnet_plot(x_filtered,go_type="Reactome", type=type,bio_type = "Reactome")
-  string_analysis(ego3,go_type="Reactome",type=type)
+
+  if(nrow(x_filtered@result)>1){
+    ego3<-make_cnet_plot(x_filtered,go_type="Reactome", type=type,bio_type="Reactome")
+    cat("Finished network analysis GO analysis for: ", type, ".\n")
+
+    string_analysis(ego3,go_type="Reactome",type=type)
+    cat("Finished STRING network analysis GO analysis for: ", type, ".\n")
+  }else{
+    cat("Only", nrow(x_filtered@result), "simplified GO term for:",
+        type,"; skipping network analysis.\n")
+  }
 
 
   pathways_to_plot <- as.vector(head(react_filtered$Description, viewpath_n))
-  message("Running viewPathway on top ", length(pathways_to_plot), " pathways")
+  cat("Running viewPathway on top ", length(pathways_to_plot), " pathways.\n")
   gene_list_nodup <- gene_list[!duplicated(names(gene_list))]
   old_overlaps <- options(ggrepel.max.overlaps = Inf)
   on.exit(options(old_overlaps), add = TRUE)
@@ -180,13 +193,12 @@ reactome_function <- function(df,universe_df,type = "Upregulated",gene_col = "Pr
       ggsave(paste0(clean_name, "_", type, "_pathway.png"),
              plot   = ggplot_gtable(built),
              width  = 8, height = 8, dpi = 300)
-      message("Done: ", pathways_to_plot[i])
+      cat("Done: ", pathways_to_plot[i])
 
     }, error = function(e) {
-      message("viewPathway failed for: ", pathways_to_plot[i], " — ", e$message)
+      cat("viewPathway failed for: ", pathways_to_plot[i], " — ", e$message,".\n")
     })
   }
 
-  message("Reactome complete for: ", type)
-  return(invisible(react_filtered))
+  cat("Reactome complete for: ", type,".\n")
 }

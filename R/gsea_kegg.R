@@ -9,7 +9,7 @@
 #' @keywords GSEAKegg
 #' @examples
 #' gsea_kegg()
-#' @import dplyr stringr tidyverse tidyr ggsci ggplot2 svglite forcats clusterProfiler igraph org.Hs.eg.db enrichplot pathview
+#' @import dplyr stringr tidyverse tidyr ggsci ggplot2 svglite forcats clusterProfiler AnnotationDbi igraph org.Hs.eg.db enrichplot pathview
 #' @export
 
 gsea_kegg<-function(df,gene_col="Protein" ,lfc_col="logFC",
@@ -21,10 +21,10 @@ gsea_kegg<-function(df,gene_col="Protein" ,lfc_col="logFC",
   dir_name <- paste0("GSEAKEGG_", type)
   dir.create(file.path(dir_name), showWarnings = FALSE)
   setwd(file.path(dir_name))
-  message("Running GSEA KEGG for: ", type, " | ", getwd())
+  cat("Running GSEA KEGG for: ", type, " | ", getwd(),"\n")
 
   #Maping Gene symbol back to EntrezID
-  genes<-mapIds(org.Hs.eg.db, df[[gene_col]], "ENTREZID", "SYMBOL")
+  genes<-AnnotationDbi::mapIds(org.Hs.eg.db, df[[gene_col]], "ENTREZID", "SYMBOL")
   df$entrez<- genes
   #If there are duplicate entrez mapped genes, keeps the highest ranking
   df <- df %>% filter(!is.na(entrez), !is.na(.data[[lfc_col]])) %>%
@@ -41,24 +41,48 @@ gsea_kegg<-function(df,gene_col="Protein" ,lfc_col="logFC",
                   pAdjustMethod = "BH",
                   minGSSize = 3,
                   organism = "hsa",
-                  nPermSimple=n_perm)
+                  nPermSimple=n_perm,
+                  pvalueCutoff = 1)
 
   if (is.null(kegg) || !("result" %in% slotNames(kegg)) || nrow(kegg@result) == 0) {
-    message(paste("No significant gseKEGG results found for module:", type, ". Skipping gseKEGG-related steps."))
+    cat(paste("No gseKEGG results found for module:", type, ". Skipping gseKEGG-related steps.\n"))
     return()
   }
+
 
   #Make Kegg results a df
   kegg_results<- as.data.frame(kegg@result)
   kegg_results$hsa.id <- rownames(kegg_results)
-  #Make dotplot
 
-  a<-dotplot(kegg, showCategory = 15,
-             title = paste0(gsub("_"," ",type)," GSEA KEGG Enriched Pathways") ,
-             split=".sign")+
-    facet_grid(.~.sign)+
-    theme_pub() +
-    scale_fill_gradient(low = "red2", high = "navy")
+  #Checking for sig kegg results
+  use_raw<-F
+  kegg_sig<-kegg_results%>%filter(p.adjust<=0.05)
+  if(nrow(kegg_sig)==0){
+    cat("No KEGG pathways significant by adjusted p.value; using raw\n")
+    kegg_sig <- kegg_results %>%filter(pvalue <= 0.05)
+    use_raw<-T
+  }
+
+  if(nrow(kegg_sig)==0){
+    cat("No KEGG pathways significant even by raw p value. Big sad\n")
+    return()
+  }
+
+  kegg@result<-kegg_sig
+
+  write.csv(kegg_results,paste0(type, " GSEAKegg results.csv"))
+  write.csv(kegg_sig,paste0(type, " GSEAKegg results filtered.csv"))
+
+  #Make dotplot
+  color_var <- if (use_raw) "pvalue" else "p.adjust"
+
+  a<-dotplot(kegg, showCategory = 15, color=color_var,
+               title = paste0(gsub("_"," ",type)," GSEA KEGG Enriched Pathways") ,
+               split=".sign")+
+      facet_grid(.~.sign)+
+      theme_pub() +
+      scale_fill_gradient(low = "red2", high = "navy")
+
 
   a$data$Description <- factor(str_wrap(a$data$Description, width = 40),
                                levels = str_wrap(levels(factor(a$data$Description)),
@@ -76,11 +100,23 @@ gsea_kegg<-function(df,gene_col="Protein" ,lfc_col="logFC",
   ggsave(paste0(type," GSEKegg results.png"), a, device = "png",
          width=plot_width, height =plot_height)
 
-  pathview_results <- as.data.frame(kegg_results@result)%>% arrange(p.adjust) %>%
-    head(20)
+
+  if(use_raw){
+    pathview_results <- as.data.frame(kegg@result)%>%
+      arrange(pvalue) %>%
+      head(20)
+    print(head(pathview_results,n=5))
+  }else{
+    pathview_results <- as.data.frame(kegg@result)%>%
+      arrange(p.adjust) %>%
+      head(20)
+    print(head(pathview_results,n=5))
+  }
+  cat("Pathways going to Pathview:", nrow(pathview_results), "\n")
+  cat("Pathview output directory:", getwd(), "\n")
 
   #Make pathview obj
-  for(j in 1:nrow(kegg_results)){
+  for(j in seq_len(nrow(pathview_results))){
     tryCatch({
       genes.2<- as.vector(pathview_results[j,c("core_enrichment")])
       genes.2<- strsplit(genes.2, split = "/", fixed = T)
@@ -89,24 +125,24 @@ gsea_kegg<-function(df,gene_col="Protein" ,lfc_col="logFC",
       gene.list<- df%>%filter(entrez %in% genes.2)%>%
         dplyr::select(all_of(c("entrez", lfc_col)))
       gene_list<-setNames(gene.list[[lfc_col]],gene.list[["entrez"]])
+      cat( "Running Pathview",j, "/", nrow(pathview_results), ":", pathview_results$ID[j],"\n")
+
       suffix<-pathview_results[j,"Description"] |> str_replace_all("[^A-Za-z0-9 _-]", "") |>
         str_squish()|>
-        str_trunc(60,ellipsis = "")
+        str_trunc(20,ellipsis = "")
 
       pathview(gene.data = gene_list, pathway.id = pathview_results[j,"ID"],
+               kegg.dir = getwd(),
                species = "hsa",
                out.suffix = paste0(suffix," gseKEGG results"),
                limit = list(gene = 2),low   = list(gene = "#2166AC"),
                mid   = list(gene = "white"),high  = list(gene = "#B2182B"))
+      cat("Finished Pathview:", pathview_results$ID[j], "\n")
     }, error = function(e) {
-      message(paste("Error processing pathway ID:", pathview_results[j,"ID"], "at row"))
-      message(paste("Error message:", e$message))
+      cat(paste("Error processing pathway ID:", pathview_results[j,"ID"], "at row.\n"))
+      cat(paste("Error message:", e$message,"\n"))
     }, finally = {
-      message("Done with this kegg analysis")
+      cat("Done with this kegg analysis")
     })
   }
-
-
-  write.csv(kegg_results,paste0(type, " GSEAKegg results.csv"))
-  return(kegg_results)
 }

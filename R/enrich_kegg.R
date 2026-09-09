@@ -14,7 +14,7 @@
 #' @import dplyr stringr tidyverse tidyr ggsci ggplot2 svglite forcats clusterProfiler igraph org.Hs.eg.db enrichplot DOSE pathview
 #' @export
 
-enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
+enrich_kegg<-function(df,universe, gene_col="Protein" ,lfc_col="logFC",
                               type = paste0(unique(df$Contrast),"-all-up") ){
   # save starting directory and make new directory
   original_wd <- getwd()
@@ -22,7 +22,7 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
   dir_name <- paste0("EnrichKEGG_", type)
   dir.create(file.path(dir_name), showWarnings = FALSE)
   setwd(file.path(dir_name))
-  message("Running Enrich KEGG for: ", type, " | ", getwd())
+  cat("Running Enrich KEGG for: ", type, " | ", getwd(),"\n")
 
   genes<-mapIds(org.Hs.eg.db, df[[gene_col]], "ENTREZID", "SYMBOL")
   df$entrez<- genes
@@ -38,9 +38,7 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
   universegenes <- universe %>% filter(!is.na(entrez)) %>%
     distinct(entrez)%>%pull(entrez)
 
-  enrichgenes<- unlist(as.vector(df$entrez))
-
-  enrichkegg <- enrichKEGG(enrichgenes,
+  enrichkegg <- enrichKEGG(df$entrez,
                            keyType = "kegg",
                            minGSSize = 3,
                            organism = "hsa",
@@ -50,7 +48,7 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
 
   # Check if kegg object has results before proceeding
   if (is.null(enrichkegg) || !("result" %in% slotNames(enrichkegg)) || nrow(enrichkegg@result) == 0) {
-    message(paste("No enrichkegg results found for module:", type, "Skipping pathway visualization."))
+    cat(paste("No enrichkegg results found for module:", type, ". No data for you: BOOM.TOASTED.\n"))
     return()
   }
   enrichkegg_results<- as.data.frame(enrichkegg@result)%>%
@@ -58,33 +56,38 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
     arrange(p.adjust)
 
   if (nrow(enrichkegg_results) == 0) {
-    message(paste("No enrichkegg results found for module:", type, "Skipping pathway visualization."))
+    cat(paste("No enrichkegg results found for module:", type, "Skipping pathway visualization.\n"))
     return()
   }
+  cat("Finished running Enrich KEGG for: ", type, ". Now onto Jaccard. ", "\n")
 
-  kegg_eligible<-enrichkegg[enrichkegg$ID %in% enrichkegg_results,asis=T]
+  kegg_eligible<-enrichkegg
+  kegg_eligible@result<-enrichkegg_results
 
   #Jaccard similarity
-  keep_ids <- enrichkegg_results$ID
 
-  kegg_simplified  <- tryCatch({
-    x_sim<-pairwise_termsim(kegg_eligible, method = "JC")
-    sim<-x_sim@termsim
-    d<-as.dist(1-sim)
-    hc<-hclust(d)
-    cluster<-cutree(hc,h=0.5)# JC >= 0.5 means distance <= 0.5
-    x_sim@result%>%mutate(cluster=cluster[match(Description,names(cluster))])%>%
-      group_by(cluster)%>%
-      slice_min(p.adjust,n=1,with_ties = F)%>%
-      ungroup()
-
-  },error = function(e) {
-    message("pairwise_termsim failed for ", type, ": ", e$message)
-    return(NULL)
+  if (nrow(enrichkegg_results) >= 2) {
+    kegg_simplified <- tryCatch({
+      x_sim <- pairwise_termsim(kegg_eligible, method = "JC")
+      sim <- x_sim@termsim
+      d <- as.dist(1 - sim)
+      hc <- hclust(d)
+      cluster <- cutree(hc, h = 0.5)  # JC >= 0.5 means distance <= 0.5
+      x_sim@result %>% mutate(cluster = cluster[match(Description, names(cluster))]) %>%
+        arrange(cluster, p.adjust)
+    }, error = function(e) {
+      cat("pairwise_termsim failed for ", type, ": ", e$message, "\n")
+      enrichkegg_results %>% mutate(cluster = NA)
+    })
+  } else {
+    cat("Only", nrow(enrichkegg_results), "enriched KEGG term for:", type, "; skipping similarity clustering.\n")
+    kegg_simplified <- enrichkegg_results
   }
-  )
+
   keep_ids <- kegg_simplified$ID
-  kegg_raw<-enrichkegg[enrichkegg$ID %in% keep_ids,asis=T]
+  kegg_raw<-enrichkegg
+  kegg_raw@result<-enrichkegg@result[enrichkegg@result$ID %in% keep_ids,]
+
   kegg_readable <- DOSE::setReadable(kegg_raw,OrgDb = org.Hs.eg.db,keyType = "ENTREZID")
   kegg_results <- as.data.frame(kegg_readable@result) %>%
     arrange(p.adjust)
@@ -105,21 +108,30 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
   max_label <- max(nchar(kegg_results$Description), na.rm = TRUE)
   plot_width <- max(7, min(14, 5 + max_label * 0.08))
 
-  ggsave(paste0(type," Upregulated EnrichKegg results.svg"), b,
+  ggsave(paste0(type," EnrichKegg results.svg"), b,
          device = "svg", height = plot_height, width = plot_width)
 
-  ggsave(paste0(type," Upregulated EnrichKegg results.png"), b,
+  ggsave(paste0(type," EnrichKegg results.png"), b,
          device = "png", height = plot_height, width = plot_width)
 
   write.csv(kegg_results, paste0(type," Enriched Kegg results.csv"))
+  cat("Made dotplot for Enrich Kegg for: ", type, ".\n")
 
   #Cnet and string analysis
+  if(nrow(kegg_results)>1){
   kegg_network<-make_cnet_plot(kegg_readable,go_type="KEGG", type=type,bio_type = "KEGG")
-  string_analysis(kegg_network,go_type="KEGG", type=type)
+  cat("Made network plots for Enrich Kegg for: ", type, ".\n")
 
+  string_analysis(kegg_network,go_type="KEGG", type=type)
+  cat("STRING analysis finished for Enrich Kegg for: ", type, ".\n")
+
+  }
 
   pathview_results <- as.data.frame(kegg_raw@result)%>% arrange(p.adjust) %>%
     head(20)
+
+  cat("Pathways going to Pathview:", nrow(pathview_results), "\n")
+  cat("Pathview output directory:", getwd(), "\n")
 
   for(k in 1:nrow(pathview_results)){
     tryCatch({
@@ -132,21 +144,23 @@ enrich_kegg<-function(df,universe=universe, gene_col="Protein" ,lfc_col="logFC",
       gene_list<-setNames(gene.list[[lfc_col]],gene.list[["entrez"]])
       suffix<-pathview_results[k,"Description"] |> str_replace_all("[^A-Za-z0-9 _-]", "") |>
         str_squish()|>
-        str_trunc(60,ellipsis = "")
-
+        str_trunc(20,ellipsis = "")
+      cat( "Running Pathview",k, "/", nrow(pathview_results), ":", pathview_results$ID[k],"\n")
       pathview(gene.data = gene_list,
                pathway.id = pathview_results[k,"ID"],
+               kegg.dir = getwd(),
                species = "hsa",
                out.suffix = paste0(suffix," enrichKEGG results"),
                limit = list(gene = 2),low   = list(gene = "#2166AC"),
                mid   = list(gene = "white"),high  = list(gene = "#B2182B"))
+      cat("Finished Pathview:", pathview_results$ID[k], "\n")
     }, error = function(e) {
-      message(paste("Error processing enrichkegg ID:",
-                    pathview_results[k,"ID"], "at row", k))
-      message(paste("Error message:", e$message))
+      cat(paste("Error processing enrichkegg ID:",
+                    pathview_results[k,"ID"], "at row", k),".\n")
+      cat(paste("Error message:", e$message),"\n")
     },finally = {
-      message("Done with this kegg analysis")
+      cat("Done with this kegg analysis.\n")
     })
   }
-  print(paste0("Done with enrichKEGG."))
+  cat("Done with enrichKEGG.\n")
 }
